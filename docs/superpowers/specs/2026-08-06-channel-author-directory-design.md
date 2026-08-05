@@ -28,7 +28,7 @@ D:\owner\socialMedia\Y2A-Auto\爆款视频参考\shipinghao
 新增模板变量 `author_folder`。由于批量下载会在前端提前渲染文件名，前端 `build_filename` 和后端单个下载逻辑分别按照同一套规则计算该变量：
 
 1. 优先使用去除首尾空白后的 `feed.Contact.Nickname`。
-2. 昵称为空时，使用去除首尾空白后的 `feed.Contact.Username`。
+2. 昵称为空时，后端使用去除首尾空白后的 `feed.Contact.Username`；前端使用标准化联系人结构中的 `profile.contact.id`，该字段保存原始 `feed.contact.username`。
 3. 昵称和视频号 ID 都为空时，使用固定名称 `未知视频号`。
 4. 每个候选值必须先作为单个目录名称进行清理，然后才能插入模板。清理时删除 `/`、`\` 和 Windows 非法字符，处理保留设备名、首尾空白、首尾点号和长度限制。
 5. 候选值清理失败或清理后为空时，继续尝试下一级候选值，最终保证使用可用的 `未知视频号`。
@@ -37,26 +37,28 @@ D:\owner\socialMedia\Y2A-Auto\爆款视频参考\shipinghao
 
 ## 配置与兼容性
 
-默认文件名模板从：
+保留现有的通用文件名模板：
 
 ```yaml
 filenameTemplate: "{{filename}}_{{spec}}"
 ```
 
-调整为：
+新增视频号专用模板：
 
 ```yaml
-filenameTemplate: "{{author_folder}}/{{filename}}_{{spec}}"
+channelsFilenameTemplate: "{{author_folder}}/{{filename}}_{{spec}}"
 ```
 
-保留已有的 `author` 模板变量，避免破坏用户自定义模板。新增的 `author_folder` 只提供经过清理和兜底选择的单层目录名称。
+视频号的前端批量下载和后端单个下载统一读取 `download.channelsFilenameTemplate`。公众号继续读取 `download.filenameTemplate`，因此不会接触 `author_folder`，也不会出现未知占位符目录。
 
-已有用户如果明确配置了自定义 `download.filenameTemplate`，程序继续尊重该配置，不在启动时强制覆盖。当前安装版本的配置文件属于本次明确授权的变更范围，将单独调整为新模板。
+视频号模板继续支持已有的 `author` 变量。新增的 `author_folder` 只提供经过清理和兜底选择的单层目录名称。
+
+已有用户明确配置的 `download.filenameTemplate` 保持原值，继续服务公众号及其他既有场景。新版本通过配置注册默认值提供 `download.channelsFilenameTemplate`；当前安装版本的配置文件属于本次明确授权的变更范围，将单独写入该配置。
 
 ## 数据流
 
 1. 视频 Feed 数据进入文件名生成逻辑。
-2. 前端批量下载从 `profile.contact.nickname`、`profile.contact.username`、`未知视频号` 中选择并清理 `author_folder`，然后渲染模板。
+2. 前端批量下载从 `profile.contact.nickname`、`profile.contact.id`、`未知视频号` 中选择并清理 `author_folder`，然后使用视频号专用模板进行渲染。
 3. 后端单个下载从 `feed.Contact.Nickname`、`feed.Contact.Username`、`未知视频号` 中执行相同选择和清理，然后渲染模板。
 4. 模板渲染器把 `author_folder`、`filename`、`spec` 等变量替换为实际值。
 5. 后端 `FilenameProcessor` 再次拆分并清理最终路径，作为纵深校验。
@@ -81,6 +83,7 @@ filenameTemplate: "{{author_folder}}/{{filename}}_{{spec}}"
 - 同一博主的不同视频进入同一目录。
 - 保留原有文件后缀和同名文件去重行为。
 - 前端 `build_filename` 覆盖昵称、视频号 ID 和固定名称三级兜底，并通过 ESLint 检查。
+- 公众号文件名模板和文章下载路径保持原有行为，并执行公众号相关回归测试。
 - 执行相关包测试，并执行完整 `go test ./...` 回归测试。
 - 使用 `go build -tags "with_gvisor,embed_inject"` 生成 Windows 可执行文件，确认新注入脚本已嵌入。
 
@@ -88,7 +91,7 @@ filenameTemplate: "{{author_folder}}/{{filename}}_{{spec}}"
 
 1. 构建新的 Windows 可执行文件，构建标签包含 `embed_inject`，保证 `internal/interceptor/inject/src` 的修改进入程序。
 2. 停止当前运行的下载程序，保留旧可执行文件的可恢复备份。
-3. 将新可执行文件替换到 `dist/v260714/app`，同步更新 `config.yaml`，然后重新启动程序。
+3. 将新可执行文件替换到 `dist/v260714/app`，在 `config.yaml` 中新增 `download.channelsFilenameTemplate`，然后重新启动程序。
 4. 在视频号页面发起一次测试下载，检查实际落盘目录和文件可播放性。
 5. 如果构建或运行验证失败，恢复旧可执行文件和原配置。
 
@@ -98,5 +101,6 @@ filenameTemplate: "{{author_folder}}/{{filename}}_{{spec}}"
 - 博主目录符合昵称、视频号 ID、`未知视频号` 的三级兜底规则。
 - 视频文件名格式保持现有行为。
 - 当前安装配置和项目默认配置保持一致。
+- 公众号继续使用 `download.filenameTemplate`，下载路径不受视频号分类功能影响。
 - 当前安装目录使用新构建的可执行文件，程序重启后加载新的前端注入脚本。
 - 所有新增测试和现有测试通过。
