@@ -811,6 +811,52 @@ var WXU = (() => {
    * @param {string} spec
    * @param {string} template
    */
+  function truncate_utf8_by_bytes(value, max_bytes) {
+    var result = "";
+    var length = 0;
+    for (const char of String(value)) {
+      var char_length = new TextEncoder().encode(char).length;
+      if (length + char_length > max_bytes) {
+        break;
+      }
+      result += char;
+      length += char_length;
+    }
+    return result;
+  }
+  function sanitize_author_folder_component(value) {
+    if (value === null || value === undefined) {
+      return "";
+    }
+    var cleaned = truncate_utf8_by_bytes(String(value), 235).replace(
+      /[<>:"/\\|?*]/g,
+      "",
+    );
+    cleaned = Array.from(cleaned)
+      .filter((char) => char.charCodeAt(0) >= 32)
+      .join("")
+      .trim()
+      .replace(/^\.+|\.+$/g, "");
+    if (!cleaned) {
+      return "";
+    }
+    var reserved_name = cleaned.split(".", 1)[0].toUpperCase();
+    if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(reserved_name)) {
+      return cleaned + "_";
+    }
+    return cleaned;
+  }
+  function resolve_author_folder(profile) {
+    var contact = profile && profile.contact ? profile.contact : {};
+    var candidates = [contact.nickname, contact.id, "未知视频号"];
+    for (const candidate of candidates) {
+      var cleaned = sanitize_author_folder_component(candidate);
+      if (cleaned) {
+        return cleaned;
+      }
+    }
+    return "未知视频号";
+  }
   function build_filename(profile, spec, template) {
     var default_name = (() => {
       if (profile.title) {
@@ -821,17 +867,20 @@ var WXU = (() => {
       }
       return new Date().valueOf();
     })();
+    default_name =
+      sanitize_author_folder_component(default_name) || new Date().valueOf();
     var params = {
       filename: default_name,
       id: profile.id,
-      title: profile.title,
+      title: sanitize_author_folder_component(profile.title),
       spec: null,
       created_at: profile.createtime,
       download_at: (new Date().valueOf() / 1000).toFixed(0),
     };
     if (profile.contact) {
-      params.author = profile.contact.nickname;
+      params.author = sanitize_author_folder_component(profile.contact.nickname);
     }
+    params.author_folder = resolve_author_folder(profile);
     if (spec && profile.spec) {
       var matched = profile.spec.find((item) => item.fileFormat === spec);
       if (matched) {
@@ -1600,7 +1649,7 @@ async function __wx_channels_download4(feed, opt) {
   var filename = WXU.build_filename(
     feed,
     opt.spec,
-    WXU.config.downloadFilenameTemplate,
+    WXU.config.downloadChannelsFilenameTemplate,
   );
   if (!filename) {
     WXU.error({ msg: "文件名生成失败" });
@@ -1726,7 +1775,7 @@ function __wx_channels_download_cur__() {
   var filename = WXU.build_filename(
     profile,
     null,
-    WXU.config.downloadFilenameTemplate,
+    WXU.config.downloadChannelsFilenameTemplate,
   );
   if (!filename) {
     WXU.error({ msg: "文件名生成失败" });
@@ -1744,7 +1793,7 @@ function __wx_channels_handle_print_download_command() {
   var filename = WXU.build_filename(
     _profile,
     null,
-    WXU.config.downloadFilenameTemplate,
+    WXU.config.downloadChannelsFilenameTemplate,
   );
   if (!filename) {
     alert("文件名生成失败");
@@ -1785,7 +1834,7 @@ async function __wx_channels_handle_download_cover() {
   var filename = WXU.build_filename(
     profile,
     null,
-    WXU.config.downloadFilenameTemplate,
+    WXU.config.downloadChannelsFilenameTemplate,
   );
   if (!filename) {
     WXU.error({ msg: "文件名生成失败" });

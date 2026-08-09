@@ -307,6 +307,14 @@ func (c *Config) LoadConfig() error {
 		Group:       "Download",
 	})
 	Register(ConfigItem{
+		Key:         "download.channelsFilenameTemplate",
+		Type:        ConfigTypeString,
+		Default:     "{{author_folder}}/{{filename}}_{{spec}}",
+		Description: "视频号下载文件名模板，支持 {{author_folder}}、{{filename}} 和 {{spec}} 等变量",
+		Title:       "视频号文件名模板",
+		Group:       "Download",
+	})
+	Register(ConfigItem{
 		Key:         "download.forceCheckAllFeeds",
 		Type:        ConfigTypeBool,
 		Default:     false,

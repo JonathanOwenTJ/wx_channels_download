@@ -31,6 +31,7 @@ if (typeof WXEnv === "undefined") {
   window.__wx_channels_config__ = {
     defaultHighest: false,
     downloadFilenameTemplate: "{{title}}",
+    downloadChannelsFilenameTemplate: "{{author_folder}}/{{title}}",
     downloadInFrontend: false,
     downloadPauseWhenDownload: false,
     apiServerProtocol: __wx_fake_api_protocol,

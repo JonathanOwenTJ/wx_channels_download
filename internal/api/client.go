@@ -7,8 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"os"
+	"regexp"
 	// "sort"
 	"strconv"
 	"strings"
@@ -39,6 +39,43 @@ type APIClient struct {
 	cfg           *APIConfig
 	engine        *gin.Engine
 	logger        *zerolog.Logger
+}
+
+func resolveAuthorFolder(processor *util.FilenameProcessor, candidates ...string) string {
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		cleaned, err := processor.SanitizeFilename(candidate)
+		if err == nil && cleaned != "" {
+			return cleaned
+		}
+	}
+	return "未知视频号"
+}
+
+func sanitizeFilenameTemplateComponent(processor *util.FilenameProcessor, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	cleaned, err := processor.SanitizeFilename(value)
+	if err != nil {
+		return ""
+	}
+	return cleaned
+}
+
+func renderFilenameTemplate(template, defaultName string, params map[string]string) string {
+	if template == "" {
+		return defaultName
+	}
+	re := regexp.MustCompile(`\{\{(\w+)\}\}`)
+	return re.ReplaceAllStringFunc(template, func(match string) string {
+		key := match[2 : len(match)-2]
+		return params[key]
+	})
 }
 
 func NewAPIClient(cfg *APIConfig, parent_logger *zerolog.Logger) *APIClient {
@@ -334,26 +371,24 @@ func (c *APIClient) createFeedTaskBody(oid, nid, reqUrl, eid string, isMp3, isCo
 			defaultName = util.NowSecondsStr()
 		}
 	}
-	template := c.cfg.Original.GetString("download.filenameTemplate")
+	defaultName = sanitizeFilenameTemplateComponent(c.formatter, defaultName)
+	if defaultName == "" {
+		defaultName = util.NowSecondsStr()
+	}
+	template := c.cfg.Original.GetString("download.channelsFilenameTemplate")
 	filename := defaultName
 	if template != "" {
 		params := map[string]string{
-			"filename":    defaultName,
-			"id":          feed.ID,
-			"title":       feed.ObjectDesc.Description,
-			"spec":        spec,
-			"created_at":  strconv.Itoa(feed.CreateTime),
-			"download_at": util.NowSecondsStr(),
-			"author":      feed.Contact.Nickname,
+			"filename":      defaultName,
+			"id":            feed.ID,
+			"title":         sanitizeFilenameTemplateComponent(c.formatter, feed.ObjectDesc.Description),
+			"spec":          spec,
+			"created_at":    strconv.Itoa(feed.CreateTime),
+			"download_at":   util.NowSecondsStr(),
+			"author":        feed.Contact.Nickname,
+			"author_folder": resolveAuthorFolder(c.formatter, feed.Contact.Nickname, feed.Contact.Username),
 		}
-		re := regexp.MustCompile(`\{\{(\w+)\}\}`)
-		filename = re.ReplaceAllStringFunc(template, func(m string) string {
-			key := m[2 : len(m)-2]
-			if v, ok := params[key]; ok {
-				return v
-			}
-			return ""
-		})
+		filename = renderFilenameTemplate(template, defaultName, params)
 	}
 
 	payload := &FeedDownloadTaskBody{

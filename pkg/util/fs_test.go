@@ -1,6 +1,7 @@
 package util
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -31,5 +32,21 @@ func TestSanitizeFilenameDoesNotChangeShortFilename(t *testing.T) {
 	}
 	if name != input {
 		t.Fatalf("short filename = %q, want %q", name, input)
+	}
+}
+
+func TestProcessFilenamePreservesForwardSlashDirectories(t *testing.T) {
+	processor := NewFilenameProcessor("", make(map[string]int))
+
+	name, dir, err := processor.ProcessFilename("案痕推理薄/标题①②/③_xWT156.jpg")
+	if err != nil {
+		t.Fatalf("process nested filename: %v", err)
+	}
+	if name != "③_xWT156.jpg" {
+		t.Fatalf("name = %q, want %q", name, "③_xWT156.jpg")
+	}
+	wantDir := filepath.Join("案痕推理薄", "标题①②")
+	if dir != wantDir {
+		t.Fatalf("dir = %q, want %q", dir, wantDir)
 	}
 }

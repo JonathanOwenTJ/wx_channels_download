@@ -108,7 +108,9 @@ func TestAPIClientServesWaterfallPreviewPageTemplate(t *testing.T) {
 		cfg:    &APIConfig{Protocol: "http", Hostname: "127.0.0.1", Port: 2022, RemoteServerEnabled: true},
 		engine: gin.New(),
 	}
-	client.engine.GET("/waterfall", client.handleWaterfallPreviewPage)
+	client.engine.GET("/waterfall", func(ctx *gin.Context) {
+		client.renderInjectedRootHTML(ctx, "preview.html")
+	})
 
 	resp := performStaticAssetRequest(client, http.MethodGet, "/waterfall", nil)
 

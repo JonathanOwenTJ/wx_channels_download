@@ -55,16 +55,14 @@ func (ctx *officialAccountPluginContext) SetStatusCode(code int) {
 	ctx.res.StatusCode = code
 }
 
-func TestOfficialAccountInjectsTimelessShadcnCSSInline(t *testing.T) {
+func TestOfficialAccountInjectsTimelessWeuiCSSFromSameOrigin(t *testing.T) {
 	cfg := &OfficialAccountConfig{
 		Enabled:  true,
 		Protocol: "http",
 		Hostname: "127.0.0.1",
 		Port:     2022,
 	}
-	files := newOfficialAccountTestInjectedFiles(t, map[string]string{
-		"lib/timeless/0.28.0/timeless.shadcn.css": `@layer utilities{.tt-py-1{padding-block:calc(var(--spacing) * 1)}}`,
-	})
+	files := newOfficialAccountTestInjectedFiles(t, nil)
 	plugin := CreateOfficialAccountInterceptorPlugin(cfg, files, "test-version")
 	ctx := &officialAccountPluginContext{
 		req: &proxy.ContextReq{
@@ -88,14 +86,9 @@ func TestOfficialAccountInjectsTimelessShadcnCSSInline(t *testing.T) {
 		t.Fatalf("official account HTML does not expose officialAccountEnabled=true:\n%s", ctx.body)
 	}
 
-	if !strings.Contains(ctx.body, `<style nonce="testnonce">.tt-py-1{padding-block:calc(var(--spacing) * 1)}</style>`) {
-		t.Fatalf("official account HTML does not contain inline shadcn CSS:\n%s", ctx.body)
-	}
-	if strings.Contains(ctx.body, "timeless.shadcn.css") {
-		t.Fatalf("official account HTML should inline shadcn CSS instead of linking it:\n%s", ctx.body)
-	}
-	if strings.Contains(ctx.body, "@layer") {
-		t.Fatalf("inline shadcn CSS should not contain cascade layer wrappers:\n%s", ctx.body)
+	weuiCSS := `href="/__wx_channels_assets/lib/timeless/0.28.0/timeless.weui.css?v=test-version"`
+	if !strings.Contains(ctx.body, `<link nonce="testnonce" rel="stylesheet" `+weuiCSS+`>`) {
+		t.Fatalf("official account HTML does not contain same-origin weui CSS link:\n%s", ctx.body)
 	}
 	componentsCSS := `href="/__wx_channels_assets/src/components.css"`
 	if !strings.Contains(ctx.body, `<link nonce="testnonce" rel="stylesheet" `+componentsCSS+`>`) {
@@ -107,7 +100,7 @@ func TestOfficialAccountInjectsTimelessShadcnCSSInline(t *testing.T) {
 	if !strings.Contains(ctx.body, `assetsBaseURL: "/__wx_channels_assets"`) {
 		t.Fatalf("official account HTML does not override runtime asset base URL:\n%s", ctx.body)
 	}
-	cssIdx := strings.Index(ctx.body, ".tt-py-1")
+	cssIdx := strings.Index(ctx.body, "timeless.weui.css?v=test-version")
 	jsIdx := strings.Index(ctx.body, "timeless.weui.umd.min.js?v=test-version")
 	if cssIdx < 0 || jsIdx < 0 {
 		t.Fatalf("expected both weui CSS and JS assets in injected HTML:\n%s", ctx.body)

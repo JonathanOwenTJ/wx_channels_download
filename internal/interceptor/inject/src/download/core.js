@@ -1995,7 +1995,7 @@ function DownloaderPanelViewModel(props = {}) {
       var filename = WXU.build_filename(
         feed,
         spec,
-        WXU.config.downloadFilenameTemplate,
+        WXU.config.downloadChannelsFilenameTemplate,
       );
       if (!filename) {
         return [new Error("filename 为空"), null];
@@ -2076,7 +2076,7 @@ function DownloaderPanelViewModel(props = {}) {
         var filename = WXU.build_filename(
           feed,
           spec,
-          WXU.config.downloadFilenameTemplate,
+          WXU.config.downloadChannelsFilenameTemplate,
         );
         if (filename) {
           var suffix = opt.suffix;

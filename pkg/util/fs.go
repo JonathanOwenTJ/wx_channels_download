@@ -190,9 +190,15 @@ func (fp *FilenameProcessor) SanitizeFilename(filename string) (string, error) {
 
 // 标准化单个文件名，考虑文件夹，但不记录去重状态。
 func (fp *FilenameProcessor) NormalizeFilename(input_name string) (string, string, error) {
+	input_name = strings.ReplaceAll(input_name, "\\", "/")
 	input_name = strings.ReplaceAll(input_name, "//", "_")
-	// 分离目录和文件名
-	dir, filename := filepath.Split(input_name)
+	// 使用统一后的分隔符拆分，避免 Windows 下混用 / 和 \ 时目录被拼接。
+	dir := ""
+	filename := input_name
+	if separator := strings.LastIndex(input_name, "/"); separator >= 0 {
+		dir = input_name[:separator]
+		filename = input_name[separator+1:]
+	}
 	// 清理文件名部分
 	clean_name, err := fp.SanitizeFilename(filename)
 	if err != nil {
@@ -200,8 +206,7 @@ func (fp *FilenameProcessor) NormalizeFilename(input_name string) (string, strin
 	}
 	// 处理目录部分
 	if dir != "" {
-		dir = strings.TrimSuffix(dir, string(filepath.Separator))
-		dir_components := strings.Split(dir, string(filepath.Separator))
+		dir_components := strings.Split(dir, "/")
 		valid_dirs := []string{}
 		for _, comp := range dir_components {
 			valid_dir, err := fp.SanitizeFilename(comp)

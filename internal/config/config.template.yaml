@@ -10,6 +10,7 @@ pagespy:
 download:
   defaultHighest: false
   filenameTemplate: "{{filename}}_{{spec}}"
+  channelsFilenameTemplate: "{{author_folder}}/{{filename}}_{{spec}}"
   dir: "%UserDownloads%"
   pauseWhenDownload: false
   playDoneAudio: true

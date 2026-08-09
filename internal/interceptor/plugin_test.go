@@ -44,16 +44,14 @@ func (ctx *channelPluginContext) SetStatusCode(code int) {
 	ctx.res.StatusCode = code
 }
 
-func TestChannelInjectsShadcnCSSInlineAndOtherAssetsFromSameOrigin(t *testing.T) {
+func TestChannelInjectsWeuiCSSAndOtherAssetsFromSameOrigin(t *testing.T) {
 	cfg := &InterceptorConfig{
 		APIServerProtocol: "http",
 		APIServerHostname: "127.0.0.1",
 		APIServerPort:     2022,
 		APIServerAddr:     "127.0.0.1:2022",
 	}
-	files := newTestChannelInjectedFiles(t, map[string]string{
-		"lib/timeless/0.28.0/timeless.shadcn.css": `@layer utilities{.tt-py-1{padding-block:calc(var(--spacing) * 1)}}`,
-	})
+	files := newTestChannelInjectedFiles(t, nil)
 	plugins := CreateChannelInterceptorPlugins(&Interceptor{
 		Version:           "test-version",
 		Settings:          cfg,
@@ -76,14 +74,9 @@ func TestChannelInjectsShadcnCSSInlineAndOtherAssetsFromSameOrigin(t *testing.T)
 
 	plugins[0].OnResponse(ctx)
 
-	if !strings.Contains(ctx.body, `<style>.tt-py-1{padding-block:calc(var(--spacing) * 1)}</style>`) {
-		t.Fatalf("channel HTML does not contain inline shadcn CSS:\n%s", ctx.body)
-	}
-	if strings.Contains(ctx.body, "timeless.shadcn.css") {
-		t.Fatalf("channel HTML should inline shadcn CSS instead of linking it:\n%s", ctx.body)
-	}
-	if strings.Contains(ctx.body, "@layer") {
-		t.Fatalf("inline shadcn CSS should not contain cascade layer wrappers:\n%s", ctx.body)
+	weuiCSS := `href="/__wx_channels_assets/lib/timeless/0.28.0/timeless.weui.css?v=test-version"`
+	if !strings.Contains(ctx.body, `<link rel="stylesheet" `+weuiCSS+`>`) {
+		t.Fatalf("channel HTML does not contain same-origin weui CSS link:\n%s", ctx.body)
 	}
 	componentsCSS := `href="/__wx_channels_assets/src/components.css"`
 	if !strings.Contains(ctx.body, `<link rel="stylesheet" `+componentsCSS+`>`) {
@@ -95,7 +88,7 @@ func TestChannelInjectsShadcnCSSInlineAndOtherAssetsFromSameOrigin(t *testing.T)
 	if !strings.Contains(ctx.body, `assetsBaseURL: "/__wx_channels_assets"`) {
 		t.Fatalf("channel HTML does not override runtime asset base URL:\n%s", ctx.body)
 	}
-	cssIdx := strings.Index(ctx.body, ".tt-py-1")
+	cssIdx := strings.Index(ctx.body, "timeless.weui.css?v=test-version")
 	jsIdx := strings.Index(ctx.body, "timeless.weui.umd.min.js?v=test-version")
 	envOverrideIdx := strings.Index(ctx.body, `assetsBaseURL: "/__wx_channels_assets"`)
 	envScriptIdx := strings.Index(ctx.body, "/__wx_channels_assets/src/env.js")
