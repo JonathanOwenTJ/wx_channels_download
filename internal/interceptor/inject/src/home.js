@@ -115,9 +115,6 @@ WXU.onDOMContentLoaded(function () {
   var home_page_mounted = false;
   WXU.onFetchFeedProfile((feed) => {
     console.log("[main.js]WXU.onFetchFeedProfile", feed, home_page_mounted);
-    if (home_page_mounted) {
-      return;
-    }
     home_page_mounted = true;
     WXU.set_cur_video();
     WXU.set_feed(feed);

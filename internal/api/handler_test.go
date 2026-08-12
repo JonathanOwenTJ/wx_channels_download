@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -15,6 +17,87 @@ import (
 
 	"wx_channel/pkg/util"
 )
+
+func downloadTaskFromJSON(t *testing.T, raw string) *downloadpkg.Task {
+	t.Helper()
+	var task downloadpkg.Task
+	if err := json.Unmarshal([]byte(raw), &task); err != nil {
+		t.Fatalf("unmarshal download task: %v", err)
+	}
+	return &task
+}
+
+func downloadTaskForPath(t *testing.T, id string, status base.Status, path string) *downloadpkg.Task {
+	t.Helper()
+	return downloadTaskFromJSON(t, `{
+		"id":`+fmt.Sprintf("%q", id)+`,
+		"status":`+fmt.Sprintf("%q", status)+`,
+		"meta":{
+			"req":{"url":"https://example.com/video.mp4","labels":{"id":"feed-1","spec":"1080p","suffix":".mp4"}},
+			"res":{"name":"","files":[{"name":"video.mp4","path":""}]},
+			"opts":{"name":`+fmt.Sprintf("%q", filepath.Base(path))+`,"path":`+fmt.Sprintf("%q", filepath.Dir(path))+`}
+		}
+	}`)
+}
+
+func TestFilterDownloadConflictsIgnoresCompletedTaskWhenFileIsMissing(t *testing.T) {
+	missingPath := filepath.Join(t.TempDir(), "missing.mp4")
+	task := downloadTaskForPath(t, "old-task", base.DownloadStatusDone, missingPath)
+
+	conflicts := filterDownloadConflicts([]*downloadpkg.Task{task})
+
+	if len(conflicts) != 0 {
+		t.Fatalf("len(conflicts) = %d, want 0 for a completed task whose file is missing", len(conflicts))
+	}
+}
+
+func TestFilterDownloadConflictsKeepsCompletedTaskWhenFileExists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "downloaded.mp4")
+	if err := os.WriteFile(path, []byte("video"), 0644); err != nil {
+		t.Fatalf("write downloaded file: %v", err)
+	}
+	task := downloadTaskForPath(t, "done-task", base.DownloadStatusDone, path)
+
+	conflicts := filterDownloadConflicts([]*downloadpkg.Task{task})
+
+	if len(conflicts) != 1 || conflicts[0].ID != task.ID {
+		t.Fatalf("conflicts = %#v, want the completed task whose file exists", conflicts)
+	}
+}
+
+func TestFilterDownloadConflictsKeepsActiveTaskBeforeFileExists(t *testing.T) {
+	missingPath := filepath.Join(t.TempDir(), "running.mp4")
+	task := downloadTaskForPath(t, "running-task", base.DownloadStatusRunning, missingPath)
+
+	conflicts := filterDownloadConflicts([]*downloadpkg.Task{task})
+
+	if len(conflicts) != 1 || conflicts[0].ID != task.ID {
+		t.Fatalf("conflicts = %#v, want the active task", conflicts)
+	}
+}
+
+func TestFilterDownloadConflictsUsesResolvedFilenameWhenCustomNameIsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "resolved.mp4")
+	if err := os.WriteFile(path, []byte("video"), 0644); err != nil {
+		t.Fatalf("write resolved file: %v", err)
+	}
+	task := downloadTaskFromJSON(t, `{
+		"id":"resolved-task",
+		"status":"done",
+		"meta":{
+			"req":{"url":"https://example.com/video.mp4","labels":{"id":"feed-1","spec":"1080p","suffix":".mp4"}},
+			"res":{"name":"","files":[{"name":"resolved.mp4","path":""}]},
+			"opts":{"name":"","path":`+fmt.Sprintf("%q", dir)+`}
+		}
+	}`)
+
+	conflicts := filterDownloadConflicts([]*downloadpkg.Task{task})
+
+	if len(conflicts) != 1 || conflicts[0].ID != task.ID {
+		t.Fatalf("conflicts = %#v, want the task whose resolved file exists", conflicts)
+	}
+}
 
 func writeTestImage(t *testing.T, path string, width int, height int, encode func(io.Writer, image.Image) error) {
 	t.Helper()

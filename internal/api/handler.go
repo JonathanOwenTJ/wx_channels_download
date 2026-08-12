@@ -362,6 +362,40 @@ func mergeTasks(taskLists ...[]*downloadpkg.Task) []*downloadpkg.Task {
 	return merged
 }
 
+func downloadTaskFileExists(task *downloadpkg.Task) bool {
+	if task == nil || task.Meta == nil || task.Meta.Opts == nil {
+		return false
+	}
+	path := ""
+	if task.Meta.Opts.Name != "" {
+		path = filepath.Join(task.Meta.Opts.Path, task.Meta.Opts.Name)
+	} else if task.Meta.Res != nil && len(task.Meta.Res.Files) > 0 {
+		path = task.Meta.SingleFilepath()
+	}
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func filterDownloadConflicts(tasks []*downloadpkg.Task) []*downloadpkg.Task {
+	conflicts := make([]*downloadpkg.Task, 0, len(tasks))
+	for _, task := range tasks {
+		if task == nil {
+			continue
+		}
+		if task.Status != base.DownloadStatusDone && task.Status != base.DownloadStatusError {
+			conflicts = append(conflicts, task)
+			continue
+		}
+		if downloadTaskFileExists(task) {
+			conflicts = append(conflicts, task)
+		}
+	}
+	return conflicts
+}
+
 func removeExistingDownloadFile(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -407,10 +441,10 @@ func (c *APIClient) handleCreateFeedDownloadTask(ctx *gin.Context) {
 	taskPath := filepath.Join(c.cfg.DownloadDir, dir)
 	taskFilePath := filepath.Join(taskPath, taskName)
 	tasks := c.downloader.GetTasks()
-	existingTasks := mergeTasks(
+	existingTasks := filterDownloadConflicts(mergeTasks(
 		c.find_existing_feed_tasks(tasks, &body),
 		findTasksByDownloadFile(tasks, taskPath, taskName, taskFilePath),
-	)
+	))
 	_, statErr := os.Stat(taskFilePath)
 	fileExists := statErr == nil
 	if statErr != nil && !os.IsNotExist(statErr) {
@@ -1071,8 +1105,8 @@ func (c *APIClient) handleCreateChannelsTask(ctx *gin.Context) {
 		}
 	}
 	tasks := c.downloader.GetTasks()
-	existing := c.check_existing_feed(tasks, payload)
-	if existing {
+	existingTasks := filterDownloadConflicts(c.find_existing_feed_tasks(tasks, payload))
+	if len(existingTasks) > 0 {
 		result.Err(ctx, 409, "已存在该下载内容")
 		// ctx.JSON(http.StatusOK, Response{Code: 409, Msg: , Data: body})
 		return
