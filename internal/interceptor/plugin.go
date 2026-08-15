@@ -461,12 +461,18 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 					ctx.SetResponseBody(js_script)
 					return
 				}
-				if strings.Contains(pathname, "connect.publish") || strings.Contains(pathname, "applyMic.publish") {
+				// 微信会不定期调整分包后的静态文件名。轮播切换的函数签名稳定，
+				// 因此按函数签名注入，避免文件名变化后当前视频缓存停在第一条。
+				hasGoToNextFlowFeed := jsGoToNextFlowReg.MatchString(js_script)
+				hasGoToPrevFlowFeed := jsGoToPrevFlowReg.MatchString(js_script)
+				hasLoadLocalPlaylist := jsLoadLocalPlaylistReg.MatchString(js_script)
+				hasNavigationHook := hasGoToNextFlowFeed || hasGoToPrevFlowFeed || hasLoadLocalPlaylist
+				if hasNavigationHook {
 					flow_list_variable_name := "yt"
 					if m := jsFlowTabReg.FindStringSubmatch(js_script); len(m) >= 2 {
 						flow_list_variable_name = m[1]
 					}
-					{
+					if hasGoToNextFlowFeed {
 
 						js_go_next_feed := fmt.Sprintf(`goToNextFlowFeed:async function(v){
 						await $1(v);
@@ -480,7 +486,7 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 					}`, flow_list_variable_name)
 						js_script = jsGoToNextFlowReg.ReplaceAllString(js_script, js_go_next_feed)
 					}
-					{
+					if hasGoToPrevFlowFeed {
 						js_go_prev_feed := fmt.Sprintf(`goToPrevFlowFeed:async function(v){
 						await $1(v);
 						// console.log('goToPrevFlowFeed', %[1]s);
@@ -493,11 +499,7 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 					}`, flow_list_variable_name)
 						js_script = jsGoToPrevFlowReg.ReplaceAllString(js_script, js_go_prev_feed)
 					}
-					{
-						js_wxutil := ";WXU.emit(WXU.Events.UtilsLoaded,{decodeBase64ToUint64String:decodeBase64ToUint64String,createAdapterFromGlobalMapper:createAdapterFromGlobalMapper,finderJoinLiveMapper:finderJoinLiveMapper});export{"
-						js_script = jsExportReg.ReplaceAllString(js_script, js_wxutil)
-					}
-					{
+					if hasLoadLocalPlaylist {
 						local_feed_list_variable_name := "vn"
 						if m := jsLocalFlowTabReg.FindStringSubmatch(js_script); len(m) >= 2 {
 							local_feed_list_variable_name = m[1]
@@ -513,8 +515,10 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 					}`, local_feed_list_variable_name)
 						js_script = jsLoadLocalPlaylistReg.ReplaceAllString(js_script, js_load_local)
 					}
-					ctx.SetResponseBody(js_script)
-					return
+				}
+				if strings.Contains(pathname, "connect.publish") || strings.Contains(pathname, "applyMic.publish") {
+					js_wxutil := ";WXU.emit(WXU.Events.UtilsLoaded,{decodeBase64ToUint64String:decodeBase64ToUint64String,createAdapterFromGlobalMapper:createAdapterFromGlobalMapper,finderJoinLiveMapper:finderJoinLiveMapper});export{"
+					js_script = jsExportReg.ReplaceAllString(js_script, js_wxutil)
 				}
 				ctx.SetResponseBody(js_script)
 			}

@@ -114,3 +114,32 @@ func TestChannelInjectsWeuiCSSAndOtherAssetsFromSameOrigin(t *testing.T) {
 		t.Fatalf("channels.js should be injected before page script:\n%s", ctx.body)
 	}
 }
+
+func TestChannelNavigationHooksDoNotDependOnStaticAssetFilename(t *testing.T) {
+	plugins := CreateChannelInterceptorPlugins(&Interceptor{
+		Version:  "test-version",
+		Settings: &InterceptorConfig{},
+	}, nil)
+	ctx := &channelPluginContext{
+		req: &proxy.ContextReq{
+			URL: &proxy.ContextURL{
+				Path:     "/t/wx_fed/web_res/js/renamed-flow.publish.js",
+				Hostname: func() string { return "res.wx.qq.com" },
+			},
+			Header: make(http.Header),
+		},
+		res: &proxy.ContextRes{
+			Header: http.Header{},
+		},
+		body: "const feedStore={value:{feeds:[],currentFeedIndex:0}},localStore={value:{feeds:[],currentFeedIndex:0}};const hooks={flowTab:feedStore,localFlowTab:localStore,goToNextFlowFeed:nextHandler,goToPrevFlowFeed:prevHandler,loadLocalPlaylist:localHandler};export{hooks}",
+	}
+	ctx.res.Header.Set("Content-Type", "application/javascript")
+
+	plugins[1].OnResponse(ctx)
+
+	for _, eventName := range []string{"GotoNextFeed", "GotoPrevFeed", "HomeFeedChanged"} {
+		if !strings.Contains(ctx.body, "WXU.emit(WXU.Events."+eventName+", feed);") {
+			t.Fatalf("renamed static asset did not receive %s hook:\n%s", eventName, ctx.body)
+		}
+	}
+}
