@@ -69,7 +69,7 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 	cfg := interceptor.Settings
 	variables := interceptor.FrontendVariables
 	assetBaseURL := ChannelAssetsSameOriginBaseURL()
-	v := "?t=" + url.QueryEscape(version) + "&wx_channels_inject=" + url.QueryEscape(channelInjectionRevision)
+	v := "?t=" + url.QueryEscape(version+"-"+channelInjectionRevision)
 	plugin1 := &proxy.Plugin{
 		Match: "channels.weixin.qq.com",
 		OnRequest: func(ctx proxy.Context) {
