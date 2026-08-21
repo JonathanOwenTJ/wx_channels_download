@@ -171,3 +171,79 @@ func TestChannelNavigationHooksRequireMatchingFeedState(t *testing.T) {
 		t.Fatalf("navigation functions without matching feed state must remain unchanged:\n%s", ctx.body)
 	}
 }
+
+func TestChannelHTMLUsesFreshInjectionRevisionAndDoesNotCache(t *testing.T) {
+	plugins := CreateChannelInterceptorPlugins(&Interceptor{
+		Version:           "test-version",
+		Settings:          &InterceptorConfig{},
+		FrontendVariables: map[string]any{},
+	}, newTestChannelInjectedFiles(t, nil))
+	ctx := &channelPluginContext{
+		req: &proxy.ContextReq{
+			URL: &proxy.ContextURL{
+				Path:     "/web/pages/feed",
+				Hostname: func() string { return "channels.weixin.qq.com" },
+			},
+			Header: make(http.Header),
+		},
+		res: &proxy.ContextRes{
+			Header: http.Header{
+				"Cache-Control": []string{"public, max-age=86400"},
+				"ETag":          []string{`"upstream"`},
+				"Last-Modified": []string{"Fri, 15 Aug 2026 00:00:00 GMT"},
+				"Content-Type":  []string{"text/html; charset=utf-8"},
+			},
+		},
+		body: `<!doctype html><html><head><script src="/t/wx_fed/web_res/js/app.js"></script></head><body></body></html>`,
+	}
+
+	plugins[0].OnResponse(ctx)
+
+	if !strings.Contains(ctx.body, `src="/t/wx_fed/web_res/js/app.js?t=test-version-inject-r2"`) {
+		t.Fatalf("injected HTML did not use a fresh script revision:\n%s", ctx.body)
+	}
+	if got := ctx.res.Header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+	for _, header := range []string{"ETag", "Last-Modified", "Expires"} {
+		if got := ctx.res.Header.Get(header); got != "" {
+			t.Fatalf("%s = %q, want cleared after HTML injection", header, got)
+		}
+	}
+}
+
+func TestChannelModifiedJavaScriptDoesNotCacheUpstreamResponse(t *testing.T) {
+	plugins := CreateChannelInterceptorPlugins(&Interceptor{
+		Version:  "test-version",
+		Settings: &InterceptorConfig{},
+	}, nil)
+	ctx := &channelPluginContext{
+		req: &proxy.ContextReq{
+			URL: &proxy.ContextURL{
+				Path:     "/t/wx_fed/web_res/js/runtime.publish.js",
+				Hostname: func() string { return "res.wx.qq.com" },
+			},
+			Header: make(http.Header),
+		},
+		res: &proxy.ContextRes{
+			Header: http.Header{
+				"Cache-Control": []string{"public, max-age=86400"},
+				"ETag":          []string{`"upstream"`},
+				"Last-Modified": []string{"Fri, 15 Aug 2026 00:00:00 GMT"},
+				"Content-Type":  []string{"application/javascript"},
+			},
+		},
+		body: "const runtime = true;",
+	}
+
+	plugins[1].OnResponse(ctx)
+
+	if got := ctx.res.Header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+	for _, header := range []string{"ETag", "Last-Modified", "Expires"} {
+		if got := ctx.res.Header.Get(header); got != "" {
+			t.Fatalf("%s = %q, want cleared after JavaScript injection", header, got)
+		}
+	}
+}

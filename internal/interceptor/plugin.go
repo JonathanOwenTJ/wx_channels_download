@@ -52,12 +52,24 @@ var (
 	jsLoadLocalPlaylistReg              = regexp.MustCompile(`loadLocalPlaylist:([a-zA-Z]{1,})`)
 )
 
+const channelInjectionRevision = "inject-r2"
+
+func markChannelResponseUncacheable(ctx proxy.Context) {
+	res := ctx.Res()
+	if res != nil && res.Header != nil {
+		res.Header.Del("ETag")
+		res.Header.Del("Last-Modified")
+		res.Header.Del("Expires")
+	}
+	ctx.SetResponseHeader("Cache-Control", "no-store")
+}
+
 func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInjectedFiles) []*proxy.Plugin {
 	version := interceptor.Version
 	cfg := interceptor.Settings
 	variables := interceptor.FrontendVariables
 	assetBaseURL := ChannelAssetsSameOriginBaseURL()
-	v := "?t=" + version
+	v := "?t=" + url.QueryEscape(version+"-"+channelInjectionRevision)
 	plugin1 := &proxy.Plugin{
 		Match: "channels.weixin.qq.com",
 		OnRequest: func(ctx proxy.Context) {
@@ -230,6 +242,7 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 					}
 				}
 				html = strings.Replace(html, "<head>", "<head>\n"+injected.String(), 1)
+				markChannelResponseUncacheable(ctx)
 				ctx.SetResponseBody(html)
 				return
 			}
@@ -245,6 +258,7 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 				if util.Includes(pathname, "wasm_video_decode") {
 					return
 				}
+				markChannelResponseUncacheable(ctx)
 				resp_body, err := ctx.GetResponseBody()
 				if err != nil {
 					fmt.Println("[error]GetResponseBody error", err)
