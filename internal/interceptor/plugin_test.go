@@ -172,7 +172,7 @@ func TestChannelNavigationHooksRequireMatchingFeedState(t *testing.T) {
 	}
 }
 
-func TestChannelHTMLUsesFreshInjectionRevisionAndDoesNotCache(t *testing.T) {
+func TestChannelHTMLPreservesBundleVersionWhileUsingFreshInjectionRevision(t *testing.T) {
 	plugins := CreateChannelInterceptorPlugins(&Interceptor{
 		Version:           "test-version",
 		Settings:          &InterceptorConfig{},
@@ -199,8 +199,8 @@ func TestChannelHTMLUsesFreshInjectionRevisionAndDoesNotCache(t *testing.T) {
 
 	plugins[0].OnResponse(ctx)
 
-	if !strings.Contains(ctx.body, `src="/t/wx_fed/web_res/js/app.js?t=test-version-inject-r2"`) {
-		t.Fatalf("injected HTML did not use a fresh script revision:\n%s", ctx.body)
+	if !strings.Contains(ctx.body, `src="/t/wx_fed/web_res/js/app.js?t=test-version&wx_channels_inject=inject-r2"`) {
+		t.Fatalf("injected HTML did not preserve the bundle version with a separate revision key:\n%s", ctx.body)
 	}
 	if got := ctx.res.Header.Get("Cache-Control"); got != "no-store" {
 		t.Fatalf("Cache-Control = %q, want no-store", got)
