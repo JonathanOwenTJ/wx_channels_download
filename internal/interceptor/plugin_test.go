@@ -143,3 +143,31 @@ func TestChannelNavigationHooksDoNotDependOnStaticAssetFilename(t *testing.T) {
 		}
 	}
 }
+
+func TestChannelNavigationHooksRequireMatchingFeedState(t *testing.T) {
+	plugins := CreateChannelInterceptorPlugins(&Interceptor{
+		Version:  "test-version",
+		Settings: &InterceptorConfig{},
+	}, nil)
+	originalBody := "const hooks={goToNextFlowFeed:nextHandler,goToPrevFlowFeed:prevHandler,loadLocalPlaylist:localHandler};export{hooks}"
+	ctx := &channelPluginContext{
+		req: &proxy.ContextReq{
+			URL: &proxy.ContextURL{
+				Path:     "/t/wx_fed/web_res/js/partial-flow.publish.js",
+				Hostname: func() string { return "res.wx.qq.com" },
+			},
+			Header: make(http.Header),
+		},
+		res: &proxy.ContextRes{
+			Header: http.Header{},
+		},
+		body: originalBody,
+	}
+	ctx.res.Header.Set("Content-Type", "application/javascript")
+
+	plugins[1].OnResponse(ctx)
+
+	if ctx.body != originalBody {
+		t.Fatalf("navigation functions without matching feed state must remain unchanged:\n%s", ctx.body)
+	}
+}

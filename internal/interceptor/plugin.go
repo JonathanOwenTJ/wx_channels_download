@@ -466,15 +466,16 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 				hasGoToNextFlowFeed := jsGoToNextFlowReg.MatchString(js_script)
 				hasGoToPrevFlowFeed := jsGoToPrevFlowReg.MatchString(js_script)
 				hasLoadLocalPlaylist := jsLoadLocalPlaylistReg.MatchString(js_script)
-				hasNavigationHook := hasGoToNextFlowFeed || hasGoToPrevFlowFeed || hasLoadLocalPlaylist
-				if hasNavigationHook {
-					flow_list_variable_name := "yt"
-					if m := jsFlowTabReg.FindStringSubmatch(js_script); len(m) >= 2 {
-						flow_list_variable_name = m[1]
-					}
-					if hasGoToNextFlowFeed {
+				flowListMatch := jsFlowTabReg.FindStringSubmatch(js_script)
+				localFlowListMatch := jsLocalFlowTabReg.FindStringSubmatch(js_script)
+				hasFlowNavigationHook := (hasGoToNextFlowFeed || hasGoToPrevFlowFeed) && len(flowListMatch) >= 2
+				hasLocalPlaylistHook := hasLoadLocalPlaylist && len(localFlowListMatch) >= 2
+				if hasFlowNavigationHook || hasLocalPlaylistHook {
+					if hasFlowNavigationHook {
+						flow_list_variable_name := flowListMatch[1]
+						if hasGoToNextFlowFeed {
 
-						js_go_next_feed := fmt.Sprintf(`goToNextFlowFeed:async function(v){
+							js_go_next_feed := fmt.Sprintf(`goToNextFlowFeed:async function(v){
 						await $1(v);
 						// console.log('goToNextFlowFeed', %[1]s);
 						if (!%[1]s || !%[1]s.value.feeds) {
@@ -484,10 +485,10 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 						// console.log("before GotoNextFeed", %[1]s, feed);
 						WXU.emit(WXU.Events.GotoNextFeed, feed);
 					}`, flow_list_variable_name)
-						js_script = jsGoToNextFlowReg.ReplaceAllString(js_script, js_go_next_feed)
-					}
-					if hasGoToPrevFlowFeed {
-						js_go_prev_feed := fmt.Sprintf(`goToPrevFlowFeed:async function(v){
+							js_script = jsGoToNextFlowReg.ReplaceAllString(js_script, js_go_next_feed)
+						}
+						if hasGoToPrevFlowFeed {
+							js_go_prev_feed := fmt.Sprintf(`goToPrevFlowFeed:async function(v){
 						await $1(v);
 						// console.log('goToPrevFlowFeed', %[1]s);
 						if (!%[1]s || !%[1]s.value.feeds) {
@@ -497,13 +498,11 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 						// console.log("before GotoPrevFeed", %[1]s, feed);
 						WXU.emit(WXU.Events.GotoPrevFeed, feed);
 					}`, flow_list_variable_name)
-						js_script = jsGoToPrevFlowReg.ReplaceAllString(js_script, js_go_prev_feed)
-					}
-					if hasLoadLocalPlaylist {
-						local_feed_list_variable_name := "vn"
-						if m := jsLocalFlowTabReg.FindStringSubmatch(js_script); len(m) >= 2 {
-							local_feed_list_variable_name = m[1]
+							js_script = jsGoToPrevFlowReg.ReplaceAllString(js_script, js_go_prev_feed)
 						}
+					}
+					if hasLocalPlaylistHook {
+						local_feed_list_variable_name := localFlowListMatch[1]
 						js_load_local := fmt.Sprintf(`loadLocalPlaylist:async function(...args){
 						await $1(...args);
 						console.log('loadLocalPlaylist', %[1]s);
