@@ -64,6 +64,19 @@ func markChannelResponseUncacheable(ctx proxy.Context) {
 	ctx.SetResponseHeader("Cache-Control", "no-store")
 }
 
+func traceChannelResponse(interceptor *Interceptor, contentType string, htmlInjected bool) {
+	if interceptor == nil || !interceptor.Debug || interceptor.log == nil {
+		return
+	}
+	if separator := strings.Index(contentType, ";"); separator >= 0 {
+		contentType = contentType[:separator]
+	}
+	interceptor.log.Info().
+		Str("content_type", strings.TrimSpace(contentType)).
+		Bool("html_injected", htmlInjected).
+		Msg("channel_response")
+}
+
 func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInjectedFiles) []*proxy.Plugin {
 	version := interceptor.Version
 	cfg := interceptor.Settings
@@ -170,6 +183,7 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 				resp_body, err := ctx.GetResponseBody()
 				if err != nil {
 					fmt.Println("[error]get response body failed,", err)
+					traceChannelResponse(interceptor, resp_content_type, false)
 					return
 				}
 				html := string(resp_body)
@@ -243,8 +257,12 @@ func CreateChannelInterceptorPlugins(interceptor *Interceptor, files *ChannelInj
 				}
 				html = strings.Replace(html, "<head>", "<head>\n"+injected.String(), 1)
 				markChannelResponseUncacheable(ctx)
+				traceChannelResponse(interceptor, resp_content_type, true)
 				ctx.SetResponseBody(html)
 				return
+			}
+			if hostname == "channels.weixin.qq.com" {
+				traceChannelResponse(interceptor, resp_content_type, false)
 			}
 		},
 	}

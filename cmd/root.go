@@ -152,6 +152,7 @@ func root_command(cfg *config.Config) {
 	}
 	mgr := manager.NewServerManager()
 	interceptor_srv := interceptor.NewInterceptorServer(interceptor_cfg, CertFiles)
+	interceptor_srv.Interceptor.SetLog(log_file)
 	if official_cfg.Enabled {
 		interceptor_srv.Interceptor.AddPostPlugin(officialaccount.CreateOfficialAccountInterceptorPlugin(official_cfg, interceptor.Assets, cfg.Version))
 		interceptor_srv.Interceptor.AddPostPlugin(&proxy.Plugin{

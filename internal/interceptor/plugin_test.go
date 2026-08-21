@@ -1,6 +1,7 @@
 package interceptor
 
 import (
+	"bytes"
 	"net/http"
 	"strings"
 	"testing"
@@ -169,6 +170,49 @@ func TestChannelNavigationHooksRequireMatchingFeedState(t *testing.T) {
 
 	if ctx.body != originalBody {
 		t.Fatalf("navigation functions without matching feed state must remain unchanged:\n%s", ctx.body)
+	}
+}
+
+func TestDebugChannelTraceReportsNonHTMLWithoutRequestPath(t *testing.T) {
+	var trace bytes.Buffer
+	interceptor := &Interceptor{
+		Version:           "test-version",
+		Debug:             true,
+		Settings:          &InterceptorConfig{},
+		FrontendVariables: map[string]any{},
+	}
+	interceptor.SetLog(&trace)
+	plugins := CreateChannelInterceptorPlugins(interceptor, nil)
+	ctx := &channelPluginContext{
+		req: &proxy.ContextReq{
+			URL: &proxy.ContextURL{
+				Path:     "/web/pages/feed/private-query-must-not-appear",
+				Hostname: func() string { return "channels.weixin.qq.com" },
+			},
+			Header: make(http.Header),
+		},
+		res: &proxy.ContextRes{
+			Header: http.Header{
+				"Content-Type": []string{"application/json; charset=utf-8"},
+			},
+		},
+		body: `{}`,
+	}
+
+	plugins[0].OnResponse(ctx)
+
+	output := trace.String()
+	for _, expected := range []string{
+		`"message":"channel_response"`,
+		`"content_type":"application/json"`,
+		`"html_injected":false`,
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("trace missing %s: %s", expected, output)
+		}
+	}
+	if strings.Contains(output, "/web/pages/feed/private-query-must-not-appear") {
+		t.Fatalf("trace exposed request path: %s", output)
 	}
 }
 
